@@ -1,0 +1,189 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum TransactionType{
+  INCOME
+  EXPENSE
+}
+
+enum PaymentType{
+  BANK_TRANSFER
+  CASH
+  DEBIT_CARD
+  CREDIT_CARD
+}
+enum CardProviderType{
+  VISA
+  MASTER
+}
+
+enum CardType{
+  DEBIT
+  CREDIT
+}
+
+enum CardLifeStatus {
+  ACTIVE
+  STOLEN
+  DISABLED
+  EXPIRED
+}
+
+enum CreditType {
+  CARD 
+  INSTALLMENT
+  BANK_LOAN
+  LOCAL_LOAN
+  LEASE
+}
+
+enum CreditPaymentStatus{
+  CREATED 
+  PENDING
+  PAID
+  CANCELLED
+}
+
+enum UserRole{
+  USER
+  ADMIN
+}
+
+enum CreditStatus{
+  ONGOING
+  DELETED 
+  PAID
+  CANCELLED
+}
+
+model User {
+  id    Int     @default(autoincrement()) @id @map("user_id")
+  email String  @unique @map("email")
+  name  String @map("name")
+  password String @map("password")
+  image String? @map("image")
+  phoneNumber String? @map("phone_number")
+  role UserRole @default(USER)  @map("role")
+  transactions Transaction[]
+  createdAt DateTime @default(now()) @map("created_at")
+  cards Card[]
+  credits Credit[]
+  isDeleted Boolean @default(false) @map("is_deleted")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("users")
+}
+
+
+model Transaction{
+  id    Int     @default(autoincrement()) @id @map("transaction_id")
+  title String @map("title")
+  description String? @map("description")
+  type TransactionType @map("type")
+  paymentType PaymentType @map("payment_type")
+  occurredAt DateTime @map("occurred_at")
+  to String? @map("to")
+  from String? @map("from")
+  amount Decimal @map("amount")
+  createdAt DateTime @default(now()) @map("created_at")
+  user User  @relation(fields: [userId], references: [id])
+  cardStatements CardStatement[]
+  userId Int @map("user_id")
+  credits Credit[]
+  creditPayment CreditPayment[]
+  isDeleted Boolean @default(false) @map("is_deleted")
+  updatedAt     DateTime        @updatedAt @map("updated_at")
+
+  @@index([userId, occurredAt])
+  @@map("transactions")
+}
+
+model Card{
+  id    Int     @default(autoincrement()) @id @map("card_id")
+  displayName String @map("display_name")
+  issuerBank String @map("issuer_bank")
+  network CardProviderType @map("network")
+  last4 String @unique
+  type CardType @map("type")
+  status CardLifeStatus @map("status")
+  creditLimit Decimal? @map("credit_limit")
+  expMonth Int @map("exp_month")
+  expYear Int @map("exp_year")
+  user User  @relation(fields: [userId], references: [id])
+  userId Int 
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime        @updatedAt @map("updated_at")
+  cardStatements CardStatement[]
+  isDeleted Boolean @default(false) @map("is_deleted")
+
+  @@index([id, userId])
+  @@unique([userId, last4, network, type])
+  @@map("cards")
+}
+
+model CardStatement{
+  id               Int        @id @default(autoincrement()) @map("statement_id")
+  cardId           Int
+  card             Card            @relation(fields: [cardId], references: [id])
+  transactionId Int
+  transaction Transaction @relation(fields: [transactionId], references: [id])
+  amount Decimal @map("amount")
+  vendor String @map("vendor")
+
+  @@index([cardId, transactionId])
+  @@map("card_statements")
+}
+
+model Credit {
+id    Int     @default(autoincrement()) @id @map("credit_id")
+  transactionId    Int?
+  transaction      Transaction?  @relation(fields: [transactionId], references: [id], onDelete: SetNull) 
+  creditType       CreditType @map("credit_type")
+  interestRate     Decimal?      @db.Decimal(7, 4)  @map("interest_rate")
+  status CreditStatus @map("status")
+  principalAmount Decimal @map("principal_amount")
+  totalAmount      Decimal       @db.Decimal(20, 8) @map("total_amount")
+  remainingAmount  Decimal?      @db.Decimal(20, 8) @map("remaining_amount")
+  dueDate          DateTime? @map("due_date")
+  totalPayableMonths Int? @map("total_payable_months")
+  noOfPaidMonths Int? @map("no_of_months_paid") 
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
+  creditPayment CreditPayment[]
+  userId Int
+user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([dueDate])
+  @@map("credits")
+}
+
+model CreditPayment {
+  id    Int     @default(autoincrement()) @id @map("credit_payment_id")
+  creditId Int 
+  credit Credit @relation(fields: [creditId], references: [id])
+  status CreditPaymentStatus @map("status")
+  dueDate DateTime @map("due_date")
+  paidAt      DateTime? @map("paid_at")
+  transactionId Int?
+  transaction   Transaction? @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+  dueAmount Decimal @map("due_amount")
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
+
+  @@index([creditId, dueDate])
+  @@map("credit_payments")
+}
+
